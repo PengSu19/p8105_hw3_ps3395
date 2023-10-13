@@ -1,7 +1,7 @@
 ---
 title: "p8105_hw3_ps3395"
 author: "Peng Su"
-date: "2023-10-10"
+date: '`r format(Sys.time(), "%Y-%m-%d")`'
 output: github_document
 ---
 ```{r setup, include=FALSE}
@@ -14,9 +14,11 @@ library(p8105.datasets)
 knitr::opts_chunk$set(
 	echo = TRUE,
 	warning = FALSE,
-	fig.width = 8, 
+	message = FALSE,
+	fig.width = 9, 
   fig.height = 6,
-  out.width = "90%"
+  out.width = "90%",
+	fig.align = 'center'
 )
 
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
@@ -64,7 +66,8 @@ instacart |>
   mutate(aisle = fct_reorder(aisle, n)) |> 
   ggplot(aes(x = aisle, y = n)) + 
   geom_point() + 
-  labs(title = "Number of items ordered in each aisle") +
+  labs(title = "Number of items ordered in each aisle",
+       caption = "Fig 1") +
   theme(axis.text.x = element_text(angle = 60, hjust = 1))
 
 ```
@@ -79,7 +82,7 @@ instacart |>
   mutate(rank = min_rank(desc(n))) |> 
   filter(rank < 4) |> 
   arrange(desc(n)) |>
-  knitr::kable()
+  knitr::kable(caption = "Table 1")
 ```
 
 Finally is a table showing the mean hour of the day at which Pink Lady Apples and Coffee Ice Cream are ordered on each day of the week. This table has been formatted in an untidy manner for human readers. Pink Lady Apples are generally purchased slightly earlier in the day than Coffee Ice Cream, with the exception of day 5.
@@ -92,6 +95,168 @@ instacart |>
   pivot_wider(
     names_from = order_dow, 
     values_from = mean_hour) |>
-  knitr::kable(digits = 2)
+  knitr::kable(digits = 2,
+               caption = "Table 2")
 ```
+
+
+## Problem 2
+
+#### Read in and clean the data
+
+```{r P2}
+#getting the data
+data("brfss_smart2010")
+
+#cleaning the data
+brfss_df = 
+  brfss_smart2010 |>
+  as_tibble() |>
+  janitor::clean_names() |>
+  select(
+    year,
+    location_state = locationabbr,
+    location_county = locationdesc,
+    everything()
+  ) |>
+  filter(
+    topic == "Overall Health",
+    response %in% c("Poor", "Fair", "Good", "Very good","Excellent")
+  ) |>
+  mutate(
+    response = ordered(response,
+                       levels = c("Poor", "Fair", "Good", "Very good","Excellent"))
+  ) 
+```
+
+#### Using data to answer questions
+
+##### States were observed at 7 or more locations in 2002 and 2010.
+
+```{r}
+#selected the states that were observed at 7 or more locations in 2002
+state_nobs_2002 = 
+  brfss_df |>
+  filter(
+    year == 2002
+  ) |>
+  group_by(location_state,location_county) |>
+  summarize(n_obs = n()) |>
+  count(location_state, name = "n_obs") |>
+  as_tibble() |>
+  filter(
+    n_obs >=7
+  ) 
+
+#selected the states that were observed at 7 or more locations in 2010
+state_nobs_2010 = 
+  brfss_df |>
+  filter(
+    year == 2010
+  ) |>
+  group_by(location_state,location_county) |>
+  summarize(n_obs = n()) |>
+  count(location_state, name = "n_obs") |>
+  as_tibble() |>
+  filter(
+    n_obs >=7
+  )
+
+state_nobs_2002 |>
+  knitr::kable(col.names = c("States","n_observed_locations"),
+               caption = "Table 3, States that were observed at 7 or more locations in 2002")
+
+state_nobs_2010 |>
+  knitr::kable(col.names = c("States","n_observed_locations"),
+               caption = "Table 4, States that were observed at 7 or more locations in 2010")
+```
+
+As displayed in Table 3, There were total `r nrow(state_nobs_2002)` states were observed at 7 or more locations in 2002, including `r pull(state_nobs_2002,location_state)`, additionally, in 2010, there were total `r nrow(state_nobs_2010)` states that had 7 or more observing locations, including states `r pull(state_nobs_2010,location_state)` which showed in Table 4. By comparing amount of states which were observed with larger or equal to 7 locations in 2002 and 2010, the over all observing locations of states might be increased.
+
+##### Construct a dataset that is limited to "Excellent" responses, and contains, year, state, and a variable that averages the data_value across locations within a state. Make a “spaghetti” plot of this average value over time within a state (that is, make a plot showing a line for each state across years – the geom_line geometry and group aesthetic will help).
+
+```{r}
+#Construct a dataset
+spaghetti_df = 
+brfss_df |>
+  filter(
+    response == "Excellent"
+  ) |>
+  group_by(year,location_state) |>
+  mutate(
+    mean_data_val = mean(data_value, na.rm = TRUE)
+  ) |>
+  select(year, location_state, mean_data_val) |>
+  as_tibble()
+
+#Construct spaghetti plot
+spaghetti_df |>
+  ggplot(aes(x = year, 
+             y = mean_data_val, 
+             color = as.factor(location_state))) +
+  geom_line() +
+  labs(x = "Year", 
+       y = "Average data value",
+       title = "Trand of mean data values of states",
+       caption = "Fig 2, The spaghetti plot shows the trend of the average data values in different states over time. Different states are shown in different colors",
+       color = "State"
+       ) 
+```
+\newline
+
+Fig 2. shows the trend of the average `data_values` of each state from 2002 to 2010 where different colors represent different states. It is noticeable that the mean `data_values` in most states changed similarly over time, while `r spaghetti_df |> filter(mean_data_val == min(mean_data_val)) |> select(location_state)` decreased significantly in 2005, reaching the lowest value of `r spaghetti_df |> filter(mean_data_val == min(mean_data_val)) |> select(mean_data_val)`
+
+##### Make a two-panel plot showing, for the years 2006, and 2010, distribution of data_value for responses (“Poor” to “Excellent”) among locations in NY State.
+
+```{r}
+#selecting fit data
+distribution_df = 
+  brfss_df |>
+  filter(
+    location_state == "NY",
+    year %in% c(2006,2010)
+  ) |>
+  mutate(
+    location_county = sub("^NY - ", "", location_county)
+  ) |>
+  select(year, location_state, location_county, response, data_value)
+
+#making bar plot showing the distribution
+distribution_df |>
+  ggplot(aes(x = response, 
+             y = data_value, 
+             fill = location_county)) +
+  geom_bar(stat = "identity", 
+           position = "dodge") +
+  labs(x = "Response", 
+       y = "Data value",
+       title = "Distribution of data_value among locations in NY State by bar chart",
+       caption = "Fig 3, data_values of different response among different county in 2006 and 2010 are represent by bars in different colors.",
+       fill = "County"
+       ) +
+  facet_grid(. ~ year) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+#making box plot showing the distribution
+distribution_df |>
+  ggplot(aes(x = response, 
+             y = data_value)) +
+  geom_boxplot() +
+  labs(x = "Response", 
+       y = "Data value",
+       title = "Distribution of data_value among locations in NY State by box plot",
+       caption = "Fig 4, data_values among all counties are considered as a distribution of the responses, represented by a box plot, in 2006 and 2010.") +
+  facet_grid(. ~ year) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+Fig 3. and 4. both display the distribution of the `data_value` for responses among locations in NY State from `Poor` to `Excellent`. 
+
+* Bar plot
+
+In order to investigate and compare the `data_value` for `r length(levels(pull(distribution_df, response)))` different levels among different locations in NY separately, bar plot was applied to indicate the value distribution. From Fig 3, the `data_value` in `r length(unique(pull(distribution_df, location_county)) )` counties seems to share similar distribution, where higher values are mainly concentrated in `Good`, `Very good` and `Excellent` these three levels. By comparing data in 2010 with 2006, it is noticeable that `data_value` for `r (distribution_df |> filter(year == 2010) |> pull(location_county) |> unique() |> length()) - (distribution_df |> filter(year == 2006) |> pull(location_county) |> unique() |> length())` counties is only available for 2010, and the distribution of values of the response levels in 2010 is relatively similar to 2006, and the data-value of 2010 slightly increased in `Very good` level compared with 2006.
+
+* Box plot
+
+Then the Box plot displayed the overall distribution of `data_value` at different response levels of all counties in 2006 and 2010, by comparing the mean values of responses, can also be found that the `data_value` of 2010 is slightly increased at the `Very good` level, which is the same trend as shown in the bar chart.
 
